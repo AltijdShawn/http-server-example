@@ -1,0 +1,328 @@
+import { status2CodeNStr, EHTTPStatus } from "../shared/httpStatus";
+export {EHTTPStatus, status2CodeNStr}
+
+import * as net from "node:net";
+
+const preciseTiming: boolean = true
+
+export function createWebServer(requestHandlers: IRequestHandler[]) {
+  const server = net.createServer();
+  server.on("connection", handleConnection);
+
+  // let routes: Map<string, IRespObj> = new Map();
+  let post_routes: Map<string, IRespObj> = new Map();
+  let get_routes: Map<string, IRespObj> = new Map();
+
+  // let head_routes
+
+  let all_routes: Map<string, IRespObj> = new Map();
+
+  function routes_constr(prefixes: IPrefKeys, prefixed?:boolean) {
+    let pref = prefixed
+    if (prefixed == undefined) pref = false
+
+    
+    function has(key: string) {
+      if (pref == true) {
+        if (key.startsWith(prefixes.get)) return get_routes.has(key.replace(prefixes.get, ""));
+        if (key.startsWith(prefixes.post)) return post_routes.has(key.replace(prefixes.post, ""));
+        if (key.startsWith(prefixes.all)) return all(key.replace(prefixes.all, ""));
+        
+      }
+      if (pref == false) return all(key)
+
+      function all(key_:string) {
+        if(get_routes.has(key_)) return get_routes.has(key_)
+        else if(post_routes.has(key_)) return post_routes.has(key_)
+        else return false
+      }
+    }
+
+    function set(key:string, value: any) {
+      get_routes.set(key, value)
+      post_routes.set(key, value)
+      all_routes.set(key, value)
+
+      // console.log("Applying routes to all dictionaries", key, get_routes.get(key), post_routes.get(key), all_routes.get(key))
+    }
+
+    function get(key: string) {
+      return all_routes.get(key)
+    }
+
+    return {has, set, get}
+  }
+
+  const routes = routes_constr({get: "get_", post: "post_", all: "all_"}, false)
+
+  let endpoints: string[] = [];
+
+  if (!Array.isArray(requestHandlers))
+    throw new Error(
+      `[Failed to register requestHandlers]\n-----------\nthe parameter is not an array type\n-----------`
+    );
+  for (const ReqHandler_ of requestHandlers) {
+    if (ReqHandler_.route == undefined || ReqHandler_.handler == undefined)
+      throw new Error(
+        `[Failed to register requestHandler]\n-----------\nHandler of: ${ReqHandler_} is missing some parameters!\n-----------`
+      );
+    const { route, status, handler, method } = ReqHandler_;
+    const RespObj: IRespObj =
+      status == undefined ? { status: false, handler, method } : { status, handler, method };
+    // routes.set(route, RespObj);
+    if(method == "GET") get_routes.set(route, RespObj)
+    else if(method == "POST") post_routes.set(route, RespObj)
+    else if(method == "ALL") routes.set(route, RespObj)
+    else routes.set(route, RespObj)
+    endpoints.push(route);
+    console.log(`[NET_LIB_HTTP]: Registered route ${method}('${route}')`);
+  }
+
+  let fallback: IRespObj;
+
+
+  if (!routes.has("*") && !routes.has("fallback")) {
+    routes.set("fallback", {
+      status: 404,
+      handler: function (req, res) {
+        console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+        res.setHeader("Content-Type", "text/plain");
+        res.setHeader("serverside-force-content-length", "true");
+        res.setStatus(404);
+        res.end(`CANNOT GET '${req.url}', RETURNED 404`);
+      },
+      method: "ALL"
+    });
+  }
+
+  const test_star = routes.has("*");
+  const test_fallback = routes.has("fallback");
+
+  console.log (test_fallback)
+
+  if (test_star) fallback = routes.get("*");
+  else if (test_fallback) fallback = routes.get("fallback");
+  else {
+    console.log("testing fallback routes, failed, starting get-process")
+    let key = "fallback"
+    console.log("getting fallback routes from all dictionaries with selector 'fallback'", key, get_routes.get(key), post_routes.get(key), all_routes.get(key))
+    key = "*"
+    console.log("getting fallback routes from all dictionaries with selector '*'", key, get_routes.get(key), post_routes.get(key), all_routes.get(key))
+    throw new Error(
+      "Failed to auto assign fallback, please contact the developer"
+    );
+  }
+  function handleConnection(socket: net.Socket): void {
+    socket.once("readable", function () {
+      let reqBuffer: Buffer = Buffer.from("");
+
+      let buf: any;
+      let reqHeader: string;
+
+      while (true) {
+        buf = socket.read();
+
+        if (buf === null) break;
+
+        reqBuffer = Buffer.concat([reqBuffer, buf]);
+
+        let marker: number = reqBuffer.indexOf("\r\n\r\n");
+        if (marker !== -1) {
+          let remaining: Buffer = reqBuffer.slice(marker + 4);
+
+          reqHeader = reqBuffer.slice(0, marker).toString();
+
+          socket.unshift(remaining);
+          break;
+        }
+
+      }
+      // console.log(reqHeader)
+      if (reqHeader == undefined) return
+      const reqHeaders: string[] = reqHeader.split("\r\n");
+      const reqLine: string[] = reqHeaders.shift().split(" ");
+
+      const headers = reqHeaders.reduce((acc: any, currentHeader: string) => {
+        const [key, value] = currentHeader.split(":");
+        return {
+          ...acc,
+          [key.trim().toLowerCase()]: value.trim(),
+        };
+      }, {});
+
+      function parseQueries(): {[key:string]: string} {
+        const url_ = reqLine[1];
+        const QueryLine = url_.split("?")[1]
+        // console.log("QUERIESLINE", url_, QueryLine)
+        if (QueryLine == undefined) return
+        const queries = QueryLine.split("&")
+        let keyval_store: {[key:string]: string} = {}
+
+        for (const query of queries) {
+          const keyval = query.split("=")
+          const {key, val} = {key: keyval[0], val: keyval[1]}
+          keyval_store[key]=val
+          // console.log(`key: ${key}`, `val: ${val}`)
+        }
+
+        // console.log(keyval_store)
+        return keyval_store
+      }
+      const queries = parseQueries()
+
+      const request = {
+        method: reqLine[0],
+        url: reqLine[1].split("?")[0],
+        queries,
+        httpVersion: reqLine[2].split("/")[1],
+        headers,
+        socket,
+      };
+      // Initial Values
+      const stat_ok = status2CodeNStr(200);
+      let status = stat_ok.code;
+      let statusText = stat_ok.status;
+      let headersSent = false;
+      let isChunked = false;
+
+      const responseHeaders: Record<string, string | number> = {
+        server: "DDRM_NETLIB_HTTP",
+      };
+
+      function setHeader(key: string, value: string | number) {
+        responseHeaders[key.toLowerCase()] = value;
+      }
+
+      function sendHeaders() {
+        if (!headersSent) {
+          headersSent = true;
+          setHeader("date", new Date().toUTCString());
+
+          socket.write(`HTTP/1.1 ${status} ${statusText}\r\n`);
+
+          const keys: string[] = Object.keys(responseHeaders);
+          for (const key of keys) {
+            socket.write(`${key}: ${responseHeaders[key]}\r\n`);
+          }
+        }
+      }
+
+      const response = {
+        async write(chunk) {
+          if (!headersSent) {
+            if (responseHeaders["serverside-force-content-length"] == "true") {
+              setHeader("content-length", chunk ? chunk.length + 1 : 0);
+            } else if (!responseHeaders["content-length"]) {
+              isChunked = true;
+              setHeader("transfer-encoding", "chunked");
+            }
+            sendHeaders();
+          }
+          if (isChunked) {
+            const size = chunk.length.toString(16);
+
+            // console.log(
+            //     `WRITE(<Arg_type Buffer[], Arg_name chunk>)`,
+            //     `Buffer[${size}] chunk = ${chunk}`
+            // )
+
+            await socket.write(`${size}\r\n`);
+            await socket.write(`${chunk}`);
+            await socket.write("\r\n");
+          } else await socket.write(`${chunk}`);
+        },
+        async end(chunk) {
+        //   console.log("actual-content-length:" chunk.length)
+          if (!headersSent) {
+            if (!responseHeaders["content-length"]) {
+              setHeader("content-length", chunk ? chunk.length : 0);
+            }
+            sendHeaders();
+          }
+          if (isChunked) {
+            if (chunk) {
+              const size = chunk.length.toString(16);
+              await socket.write(`${size}\r\n`);
+              await socket.write(`${chunk}`);
+              await socket.write("\r\n");
+            }
+            await socket.end(`0\r\n\r\n`);
+          } else {
+            // console.log(`SOCKET.END() TRIGEGRED! data:`, chunk)
+            await socket.end(`\r\n${chunk}`);
+          }
+        },
+        setHeader,
+        setStatus(newStatus: EHTTPStatus | number | string) {
+          const stat_ = status2CodeNStr(newStatus);
+          status = stat_.code;
+          statusText = stat_.status;
+        },
+        async json(data) {
+          if (headersSent)
+            throw new Error("Headers are already sent, cannot send JSON");
+          const json = Buffer.from(JSON.stringify(data));
+          setHeader("content-type", "application/json; charset=utf-8");
+          setHeader("content-length", json.length);
+          sendHeaders();
+          await socket.end(json);
+        },
+      };
+
+      if (routes.has(request.url)) {
+        const startTime = performance.now();
+
+
+
+        let obj = all_routes.get(request.url);
+        if (request.method == "GET") obj = get_routes.get(request.url)
+        else if (request.method == "POST") obj = post_routes.get(request.url)
+        
+        if (obj.method == request.method) obj.handler(request, response);
+        else if (obj.method == "ALL") obj.handler(request, response)
+        else fallback.handler(request, response)
+
+        const endTime = performance.now();
+        if (!(responseHeaders["custom-logger"] == "true"))
+          console.log(
+            `${new Date().toISOString()} - ${request.method} ${
+              request.url
+            } - { Took: "${preciseTiming == true ? (endTime - startTime) : Math.round(endTime - startTime)}ms" }`
+          );
+      } else {
+        const startTime = performance.now();
+
+        fallback.handler(request, response);
+
+        const endTime = performance.now();
+        if (!(responseHeaders["custom-logger"] == "true"))
+          console.log(
+            `${new Date().toISOString()} - ${request.method} ${
+              request.url
+            } - { Took: "${preciseTiming == true ? (endTime - startTime) : Math.round(endTime - startTime)}ms" }`
+          );
+      }
+    });
+  }
+
+  return {
+    listen: (port: number, cb: (port: number, _: net.Server) => void) =>
+      cb(port, server.listen(port)),
+  };
+}
+
+export interface IRequestHandler extends IRespObj {
+  route: string;
+}
+
+export interface IRespObj {
+  status?: EHTTPStatus | boolean;
+  handler: (req, res) => any;
+  method: string;
+}
+
+interface IPrefKeys {
+  get: string,
+  post: string,
+  all: string
+}

@@ -1,0 +1,249 @@
+{{#>tpl_wd5 _title='Mixer'}} 
+{{#*inline "extra_head"}}
+  <link rel="stylesheet" href="/static?page=/assets/css/mixer.css" />
+{{/inline}}
+{{#*inline "extra"}}{{/inline}}
+<div class="grid" id="sliders1">
+</div>
+
+<script>
+  // Helper class for managing cookies
+  //class CookieManager {
+  //  static set(name, value, days = 7) {
+  //    let expires = '';
+  //    if (days) {
+  //      const date = new Date();
+  //      date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+  //      expires = `; expires=${date.toUTCString()}`;
+  //    }
+  //    document.cookie = `${name}=${value}${expires}; path=/`;
+  //  }
+//
+  //  static get(name) {
+  //    const nameEQ = name + '=';
+  //    const cookies = document.cookie.split(';');
+  //    for (let i = 0; i < cookies.length; i++) {
+  //      let cookie = cookies[i];
+  //      while (cookie.charAt(0) === ' ') {
+  //        cookie = cookie.substring(1, cookie.length);
+  //      }
+  //      if (cookie.indexOf(nameEQ) === 0) {
+  //        return cookie.substring(nameEQ.length, cookie.length);
+  //      }
+  //    }
+  //    return null;
+  //  }
+//
+  //  static delete(name) {
+  //    document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+  //  }
+  //}
+
+
+  //const koekjes = CookieManager
+
+  //koekjes.set('test', 'test')
+  // Create audio context
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+  function setMeter(meter, limit, value) {
+    const calculatedValue = (value / 100) * limit
+    const meter_ = document.querySelector(meter);
+    
+    let color = '#00FF00';
+    
+    if (calculatedValue > 50) color = '#AAFF00'
+    if (calculatedValue > 65) color = '#FF5500'
+    if (calculatedValue > 75) color = '#FF2200'
+    if (calculatedValue > 90) color = '#FF0000'
+    
+    meter_.style.setProperty(
+      '--indicator-height',
+      `${calculatedValue}%`
+    )
+    meter_.style.setProperty(
+      '--indicator-color',
+      color  
+    )
+  }
+
+  for (let i = 0; i < 12; i++) {
+    const str = `
+      <div class="s2 mixer-card">
+        <div class="channel-label">Channel ${i}</div>
+        <div class="slider-container">
+          <div class="volume-controls">
+            <input type="range" class="volume-slider vol-${i}" min="0" max="100" value="50" orient="vertical">
+            <div class="volume-indicators">
+              <div class="indicator ind-l-${i}"></div>
+              <div class="indicator ind-r-${i}"></div>
+            </div>
+          </div>
+          <input type="range" class="balance-slider balance-${i}" min="-100" max="100" value="0">
+          <div class="audio-controls">
+            <button class="play-btn play-btn-${i}">|></button>
+            <button class="load-btn load-btn-${i}">^</button>
+            <input type="file" class="file-input-${i}" accept="audio/*" style="display: none;">
+          </div>
+        </div>
+      </div>
+    `
+
+    document.querySelector('#sliders1').insertAdjacentHTML('beforeend', str);
+
+    // Audio setup for each channel
+    const audioElement = new Audio();
+    audioElement.crossOrigin = "anonymous";
+
+    const source = audioContext.createMediaElementSource(audioElement);
+    const gainNode = audioContext.createGain();
+    const stereoPanner = audioContext.createStereoPanner();
+    const splitter = audioContext.createChannelSplitter(2);
+    const leftAnalyser = audioContext.createAnalyser();
+    const rightAnalyser = audioContext.createAnalyser();
+
+    // Set up analyzers
+    leftAnalyser.fftSize = 256;
+    rightAnalyser.fftSize = 256;
+    const leftDataArray = new Float32Array(leftAnalyser.frequencyBinCount);
+    const rightDataArray = new Float32Array(rightAnalyser.frequencyBinCount);
+
+    // Connect nodes
+    source.connect(gainNode);
+    gainNode.connect(stereoPanner);
+    stereoPanner.connect(splitter);
+    splitter.connect(leftAnalyser, 0);
+    splitter.connect(rightAnalyser, 1);
+    stereoPanner.connect(audioContext.destination);
+
+    // Get DOM elements
+    const volumeSlider = document.querySelector(`.vol-${i}`);
+    const balanceSlider = document.querySelector(`.balance-${i}`);
+    const playButton = document.querySelector(`.play-btn-${i}`);
+    const loadButton = document.querySelector(`.load-btn-${i}`);
+    const fileInput = document.querySelector(`.file-input-${i}`);
+
+    // Volume control
+    volumeSlider.addEventListener('input', (e) => {
+      const volume = parseFloat(e.target.value) / 100;
+      gainNode.gain.value = volume;
+    });
+
+    // Balance control
+    balanceSlider.addEventListener('input', (e) => {
+      const balance = parseFloat(e.target.value) / 100;
+      stereoPanner.pan.value = balance;
+    });
+
+    // Play/Pause button
+    playButton.addEventListener('click', () => {
+      if (audioElement.paused) {
+        audioElement.play();
+      } else {
+        audioElement.pause();
+      }
+    });
+
+    // Load button
+    loadButton.addEventListener('click', () => {
+      fileInput.click();
+    });
+
+    // File input
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const url = URL.createObjectURL(file);
+        audioElement.src = url;
+      }
+    });
+
+    // Volume indicator update function
+    function updateVolumeIndicators() {
+      leftAnalyser.getFloatTimeDomainData(leftDataArray);
+      rightAnalyser.getFloatTimeDomainData(rightDataArray);
+      
+      if (!audioElement.paused) {
+        // Calculate RMS values for each channel
+        let leftSum = 0;
+        let rightSum = 0;
+        
+        for (let j = 0; j < leftAnalyser.frequencyBinCount; j++) {
+          leftSum += leftDataArray[j] * leftDataArray[j];
+          rightSum += rightDataArray[j] * rightDataArray[j];
+        }
+        
+        const leftRMS = Math.sqrt(leftSum / leftAnalyser.frequencyBinCount) * 100;
+        const rightRMS = Math.sqrt(rightSum / rightAnalyser.frequencyBinCount) * 100;
+        
+        // Apply volume scaling
+        const volume = parseFloat(volumeSlider.value);
+        const scaledLeftRMS = leftRMS * (volume/100) * 4;
+        const scaledRightRMS = rightRMS * (volume/100) * 4;
+        
+        // Apply balance effects
+        const balance = parseFloat(balanceSlider.value);
+        let leftLimit = 100;
+        let rightLimit = 100;
+        
+        if (balance < 0) {
+          rightLimit = 100 * (1 + balance/100);
+        } else if (balance > 0) {
+          leftLimit = 100 * (1 - balance/100);
+        }
+        
+        setMeter(`.ind-l-${i}`, leftLimit, Math.min(100, scaledLeftRMS));
+        setMeter(`.ind-r-${i}`, rightLimit, Math.min(100, scaledRightRMS));
+      } else {
+        // Basic visualization when paused
+        const volume = parseFloat(volumeSlider.value);
+        const balance = parseFloat(balanceSlider.value);
+        
+        let leftLimit = 100;
+        let rightLimit = 100;
+        
+        if (balance < 0) {
+          rightLimit = 100 * (1 + balance/100);
+        } else if (balance > 0) {
+          leftLimit = 100 * (1 - balance/100);
+        }
+        
+        
+        // setMeter(`.ind-l-${i}`, leftLimit, volume);
+        // setMeter(`.ind-r-${i}`, rightLimit, volume);
+      }
+      
+      requestAnimationFrame(updateVolumeIndicators);
+    }
+
+    updateVolumeIndicators();
+  }
+
+  // Snap to increments
+  document.querySelectorAll('.volume-slider, .balance-slider').forEach(slider => {
+    let lastUpdate = 0;
+    
+    slider.addEventListener('input', (e) => {
+      const now = Date.now();
+      if (now - lastUpdate < 50) return;
+      
+      const value = parseFloat(e.target.value);
+      const roundedValue = Math.round(value / 10) * 10;
+      
+      if (Math.abs(value - roundedValue) < 1) {
+        lastUpdate = now;
+        e.target.value = roundedValue;
+      }
+    });
+  });
+
+  // Resume audio context on user interaction
+  document.addEventListener('click', () => {
+    if (audioContext.state === 'suspended') {
+      audioContext.resume();
+    }
+  });
+
+</script>
+
+{{/tpl_wd5}}

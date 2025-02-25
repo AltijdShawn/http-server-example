@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{layout_title}}</title>
+    {{>layout_global_imports}}
+</head>
+    <h3>Welcome, {{test_obj.name}}!</h3>
+    <p>user_mutable == {{test_obj.user_mutable}}</p>
+    <div class="card_container">
+    {{#each people}}
+        <div class="card">
+            <div class="card_image">
+                <img src="{{this.avatar}}">
+            </div>
+            <div class="card_title">
+                <h3>{{this.name}}  <span class="age">({{this.age}})</span></h3>
+            </div>
+            <div class="card_desc">
+                <ul class="job">
+                    <li>Company: {{this.info.job.company}}</li>
+                    <li>Title: {{this.info.job.title}}</li>
+                </ul>
+            </div>
+        </div>
+
+    {{/each}}
+    </div>
+</body>
+</html>

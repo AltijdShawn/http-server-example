@@ -1,0 +1,453 @@
+import fs from "fs";
+import tls from "tls";
+
+import { Socket, Server } from "net";
+import * as HTTP11 from "./HTTP_1.1/V4";
+import * as HTTP2 from "./HTTP_2/V1";
+// import * as HTTP3 from "./HTTP3/v1";
+import { Routes, registerRoute } from './HTTP_1.1/Methods';
+// import { logger } from "handlebars";
+import { Logger } from "./shared/logger";
+
+const logger = new Logger('RouterUtils');
+
+let routes: IRouteEntry[] = []
+let routesCopy: IRouteEntry[] = []
+
+let middlewares: {
+    handler: ((req: IReq, res: IRes, next: () => Promise<void>) => Promise<void>) | IRouter,
+    path?: string
+}[] = []
+
+function add(method: TMethod, route: string, handler: (req: IReq, res: IRes) => any) {
+    routes.push({ method, route, handler })
+    // routesCopy.push({ method, route, handler })
+}
+
+function mw_add(handlerOrRouter: ((req: IReq, res: IRes, next: () => Promise<void>) => Promise<void>) | IRouter | any, path?: string) {
+    // If it's a class constructor (like API)
+    if (typeof handlerOrRouter === 'function' && handlerOrRouter.prototype?.router) {
+        const instance = new handlerOrRouter(router(path || '/'));
+        const routerInstance = instance.router as any;
+        
+        // Register all routes from the router instance with the proper path prefix
+        routerInstance.routes.forEach(route => {
+            const fullPath = path ? `${path}${route.route}` : route.route;
+            add(route.method as TMethod, fullPath, route.handler);
+        });
+        
+        middlewares.push({ handler: instance.router, path });
+    }
+    // If it's already a router instance
+    else if (typeof handlerOrRouter === 'object' && 'get' in handlerOrRouter) {
+        const routerInstance = handlerOrRouter as IRouter;
+        
+        // Register all routes with the path prefix
+        routerInstance.routes.forEach(route => {
+            const fullPath = path ? `${path}${route.route}` : route.route;
+            add(route.method as TMethod, fullPath, route.handler);
+        });
+        
+        middlewares.push({ handler: handlerOrRouter as IRouter, path });
+    }
+    // Regular middleware function
+    else {
+        middlewares.push({ handler: handlerOrRouter, path });
+    }
+}
+export function remap(endpoint:string, route:string, method: TMethod) {
+    // routes = []
+    // routes = routesCopy
+
+    for (const _base of routes) {
+        // let a1 = _base;
+        // a1.route = route
+        // a1.method = method
+
+        // console.log(a1, routes.includes(a1))
+        // if (routes.includes(a1)) return console.log(`[NET_LIB_HTTP.RouterUtils]: Remap '${route}' already exists`)
+        if (_base.route == endpoint) {
+            routes.push({ route, handler: _base.handler, method })
+            console.log(`[NET_LIB_HTTP.RouterUtils]: Remaped '${endpoint}' to '${route}'`)
+        }
+    }
+
+    // console.log(routes)
+}
+
+export class RouterClass {
+    public router: IRouter;
+
+    remap: IRouter['remap'];
+    use: IRouter['use'];
+    get: IRouter['get'];
+    head: IRouter['head'];
+    post: IRouter['post'];
+    put: IRouter['put'];
+    _delete: IRouter['_delete'];
+    connect: IRouter['connect'];
+    options: IRouter['options'];
+    trace: IRouter['trace'];
+    patch: IRouter['patch'];
+    all: IRouter['all'];
+
+    constructor(protected R: IRouter) {
+        this.router = R;
+
+        Object.assign(this, this.router);
+
+        this.use = this.router.use.bind(this.router);
+        this.get = this.router.get.bind(this.router);
+        this.post = this.router.post.bind(this.router);
+        this.head = this.router.head.bind(this.router);
+        this.put = this.router.put.bind(this.router);
+        this._delete = this.router._delete.bind(this.router);
+        this.connect = this.router.connect.bind(this.router);
+        this.options = this.router.options.bind(this.router);
+        this.trace = this.router.trace.bind(this.router);
+        this.patch = this.router.patch.bind(this.router);
+        this.all = this.router.all.bind(this.router);
+    }   
+}
+
+// Add this interface to define the expected class structure
+export interface _RouterClass {
+    new (router: IRouter): { router: IRouter };
+}
+
+type RouterHandler = 
+    | string 
+    | ((req: IReq, res: IRes, next: () => Promise<void>) => Promise<void>) 
+    | IRouter 
+    | (new (router: IRouter) => { router: IRouter })
+    | typeof RouterClass
+
+export function use(
+    pathOrHandler: RouterHandler,
+    handler?: IRouter | (new (router: IRouter) => { router: IRouter })
+) {
+    if (typeof pathOrHandler === 'string' && handler) {
+        if (typeof handler === 'function' && 'prototype' in handler) {
+            // Create new router instance with the prefixed base path
+            const instance = new handler(router(pathOrHandler));
+            mw_add(instance.router, pathOrHandler);
+        } else {
+            // It's a regular router
+            mw_add(handler, pathOrHandler);
+        }
+    } else if (typeof pathOrHandler === 'function') {
+        if ('prototype' in pathOrHandler && pathOrHandler.prototype?.router) {
+            // It's a router class constructor
+            const instance = new (pathOrHandler as new (router: IRouter) => { router: IRouter })(router('/'));
+            middlewares.push({ handler: instance.router });
+        } else {
+            // It's a regular middleware function
+            middlewares.push({ 
+                handler: pathOrHandler as ((req: IReq, res: IRes, next: () => Promise<void>) => Promise<void>)
+            });
+        }
+    }
+    return router('/');
+}
+
+// export function all(route: string, handler: (req:IReq, res:IRes) => any) {add("ALL", route, handler)}
+export function get(route: string, handler: (req:IReq, res:IRes) => any) {add('GET', route, handler)}
+export function head(route: string, handler: (req:IReq, res:IRes) => any) {add('HEAD', route, handler)}
+export function post(route: string, handler: (req:IReq, res:IRes) => any) {add('POST', route, handler)}
+export function put(route: string, handler: (req:IReq, res:IRes) => any) {add('PUT', route, handler)}
+export function _delete(route: string, handler: (req:IReq, res:IRes) => any) {add('DELETE', route, handler)}
+export function connect(route: string, handler: (req:IReq, res:IRes) => any) {add('CONNECT', route, handler)}
+export function options(route: string, handler: (req:IReq, res:IRes) => any) {add('OPTIONS', route, handler)}
+export function trace(route: string, handler: (req:IReq, res:IRes) => any) {add('TRACE', route, handler)}
+export function patch(route: string, handler: (req:IReq, res:IRes) => any) {add('PATCH', route, handler)}
+export function all(route: string, handler: (req:IReq, res:IRes) => any) {add('ALL', route, handler)}
+
+class Layer {
+    method: string;
+    path: string;
+    handler: (req: IReq, res: IRes) => any;
+
+    constructor(method: string, path: string, handler: (req: IReq, res: IRes) => any) {
+        this.method = method;
+        this.path = path.startsWith('/') ? path : '/' + path;
+        this.handler = handler;
+    }
+
+    match(method: string, path: string): boolean {
+        return this.method === method && (
+            this.path === path || 
+            (this.path === '*') ||
+            (path.startsWith(this.path) && (this.path.endsWith('/') || path[this.path.length] === '/'))
+        );
+    }
+}
+
+// Track mounted paths at module level
+const mountedPaths = new Set<string>();
+
+export function router(base: string = '/'): IRouter {
+    const routes: Array<{method: string, route: string, handler: (req: IReq, res: IRes) => any}> = [];
+    let errorHandler: (req: IReq, res: IRes, err?: Error) => Promise<void>;
+
+    function setErrorHandler_(handler: (req: IReq, res: IRes, err?: Error) => Promise<void>) {
+        errorHandler = handler;
+    }
+
+    function registerMethod(method: TMethod, route: string, handler: (req: IReq, res: IRes) => any) {
+        route = route.startsWith('/') ? route : '/' + route;
+        routes.push({ method, route, handler });
+        
+        logger.debug(method, route)
+        registerRoute(method, route === '/*' ? '*' : route, {
+            handler,
+            method,
+            status: false,
+            errorHandler
+        });
+    }
+
+    function get_(route: string, handler: (req: IReq, res: IRes) => any) {
+        registerMethod('GET', route, handler);
+    }
+
+    function head_(route: string, handler: (req: IReq, res: IRes) => any) {
+        registerMethod('HEAD', route, handler);
+    }
+
+    function post_(route: string, handler: (req: IReq, res: IRes) => any) {
+        registerMethod('POST', route, handler);
+    }
+
+    function put_(route: string, handler: (req: IReq, res: IRes) => any) {
+        registerMethod('PUT', route, handler);
+    }
+
+    function delete_(route: string, handler: (req: IReq, res: IRes) => any) {
+        registerMethod('DELETE', route, handler);
+    }
+
+    function connect_(route: string, handler: (req: IReq, res: IRes) => any) {
+        registerMethod('CONNECT', route, handler);
+    }
+
+    function options_(route: string, handler: (req: IReq, res: IRes) => any) {
+        registerMethod('OPTIONS', route, handler);
+    }
+
+    function trace_(route: string, handler: (req: IReq, res: IRes) => any) {
+        registerMethod('TRACE', route, handler);
+    }
+
+    function patch_(route: string, handler: (req: IReq, res: IRes) => any) {
+        registerMethod('PATCH', route, handler);
+    }
+
+    function all_(route: string, handler: (req: IReq, res: IRes) => any) {
+        registerMethod('ALL', route, handler);
+    }
+
+    function use_(
+        pathOrHandler: RouterHandler,
+        handler?: IRouter | (new (router: IRouter) => { router: IRouter })
+    ) {
+        if (typeof pathOrHandler === 'string' && handler) {
+            if (typeof handler === 'function' && 'prototype' in handler) {
+                const instance = new handler(router());
+                
+                // Register all routes from the instance with the prefix
+                instance.router.routes.forEach(route => {
+                    registerRoute(route.method, `${pathOrHandler}${route.route}`, {
+                        handler: route.handler,
+                        method: route.method,
+                        status: false,
+                        errorHandler: instance.router.errorHandler
+                    });
+                });
+            }
+        }
+        return router(base);
+    }
+
+    return {
+        routes,
+        errorHandler,
+        remap,
+        use: use_,
+        get: get_,
+        head: head_,
+        post: post_,
+        put: put_,
+        _delete: delete_,
+        connect: connect_,
+        options: options_,
+        trace: trace_,
+        patch: patch_,
+        all: all_,
+        setErrorHandler: setErrorHandler_
+    };
+}
+
+export function createServer(config?: {
+    notPreserveConfigFlags: boolean
+}) {
+    let notPreserve = false;
+    if (!config || !config.notPreserveConfigFlags) notPreserve = false
+    else notPreserve = config.notPreserveConfigFlags
+
+    return {
+        // ? Export the router
+        router, 
+        // ? Export the handler registries
+        use,
+        //
+        get,
+        head,
+        post,
+        put,
+        _delete,
+        connect,
+        options,
+        trace,
+        patch,
+        all, 
+        // ? Export the servers
+        listen: (port) => {
+            return new Promise(async (res, rej) => {
+                try {
+                    // @ts-ignore
+                    const server = await HTTP11.createWebServer(routes, middlewares, notPreserve);
+                    server.listen(port, (port:number, _) => res({port, _}))
+                } catch(e) {
+                    console.log(e);
+                    rej(e)
+                }
+            })
+        },
+        listenSync: async (port: number, cb: (port: number, _) => void) => {
+            // @ts-ignore
+            const server = await HTTP11.createWebServer(routes, middlewares, notPreserve);
+            server.listen(port, cb)
+        },
+        listenH2: (port) => {
+            const sslOptions = {
+                key: fs.readFileSync('./cert/key.pem'),
+                cert: fs.readFileSync('./cert/cert.pem')
+            }
+            return new Promise(async (res, rej) => {
+                try {
+                    const server = await HTTP2.createWebServer(routes, middlewares, notPreserve);
+                    server.listen(port, (port:number, _) => res({port, _}))
+                } catch(e) {
+                    console.log(e);
+                    rej(e)
+                }
+            })
+        },
+        listenSyncH2: async (port: number, cb: (port: number, _) => void) => {
+            const sslOptions = {
+                key: fs.readFileSync('./cert/key.pem'),
+                cert: fs.readFileSync('./cert/cert.pem')
+            }
+            const server = await HTTP2.createWebServer(routes, middlewares, notPreserve);
+            server.listen(port, cb)
+        },
+        // listenH3: (port) => {
+        //     return new Promise(async (res, rej) => {
+        //         try {
+        //             const server = await HTTP3.createWebServer(routes, middlewares, notPreserve);
+        //             server.listen(port, (port:number) => res({port}))
+        //         } catch(e) {
+        //             console.log(e);
+        //             rej(e)
+        //         }
+        //     })
+        // },
+        // listenH3Sync: async (port: number, cb: (port: number) => void) => {
+        //     const server = await HTTP3.createWebServer(routes, middlewares, notPreserve);
+        //     server.listen(port, cb)
+        // }
+
+    }
+}
+
+
+
+const Router = {createServer};
+export default Router
+
+type TMethod = 
+    | 'GET'
+    | 'HEAD'
+    | 'POST'
+    | 'PUT'
+    | 'DELETE'
+    | 'CONNECT'
+    | 'OPTIONS'
+    | 'TRACE'
+    | 'PATCH'
+    | 'ALL'
+
+export interface IReq {
+    method: TMethod;
+    url: string;
+    queries: {
+        [key: string]: string;
+    }
+    httpVersion: string;
+    headers: any | {
+        [key: string]: string | number;
+    };
+    body: string;
+    params: {
+        [key: string]: any
+    };
+    // macros: any[];
+    socket: Socket;
+}
+export interface IRes {
+    write(chunk: any): Promise<void>;
+    end(chunk: any): Promise<void>;
+    setHeader: (key: string, value: string | number) => void;
+    setStatus(newStatus: HTTP11.EHTTPStatus | number | string): void;
+    json(data: any): Promise<void>;
+}
+
+export interface IRouteEntry {
+    method: TMethod,
+    route: string,
+    handler: (req: IReq, res: IRes) => any
+}
+
+type Middleware = {
+    handler: ((req: IReq, res: IRes, next: () => Promise<void>) => Promise<void>) | IRouter,
+    path?: string
+};
+
+export interface IRouter {
+    routes: Array<{
+        method: string, 
+        route: string, 
+        handler: (req: IReq, res: IRes) => any,
+        isRouted?: boolean
+    }>;
+    mounted?: boolean;
+    isSubRouter?: boolean;
+    errorHandler: (req: IReq, res: IRes, err?: Error) => Promise<void>;
+    remap: (endpoint: string, route: string, method: TMethod) => void;
+    use: (
+        pathOrHandler: RouterHandler, 
+        handler?: IRouter | (new (router: IRouter) => { router: IRouter })
+    ) => IRouter;
+    get: (route: string, handler: (req: IReq, res: IRes) => any) => void;
+    head: (route: string, handler: (req: IReq, res: IRes) => any) => void;
+    post: (route: string, handler: (req: IReq, res: IRes) => any) => void;
+    put: (route: string, handler: (req: IReq, res: IRes) => any) => void;
+    _delete: (route: string, handler: (req: IReq, res: IRes) => any) => void;
+    connect: (route: string, handler: (req: IReq, res: IRes) => any) => void;
+    options: (route: string, handler: (req: IReq, res: IRes) => any) => void;
+    trace: (route: string, handler: (req: IReq, res: IRes) => any) => void;
+    patch: (route: string, handler: (req: IReq, res: IRes) => any) => void;
+    all: (route: string, handler: (req: IReq, res: IRes) => any) => void;
+    setErrorHandler: (handler: (req: IReq, res: IRes, err?: Error) => Promise<void>) => void;
+    middlewares?: Middleware[];
+}

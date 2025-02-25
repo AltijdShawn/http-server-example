@@ -1,0 +1,1 @@
+import '/static?page=/js/sockets.js'

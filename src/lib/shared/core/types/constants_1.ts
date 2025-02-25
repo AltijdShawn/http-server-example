@@ -1,0 +1,1 @@
+export const HEX_CHAR_LIST = "0123456789abcdef"

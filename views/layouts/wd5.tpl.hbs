@@ -1,0 +1,85 @@
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{_title}}</title>
+    {{! <link rel="stylesheet" href="/static?page=/css/base.css" />
+
+    <script src="/static?page=/assets/setup.js" type="module" defer></script> }}
+
+    <link rel="stylesheet" href="/static?page=/assets/beer.min.css" />
+    <script type="module" src="/static?page=/assets/beer.min.js" defer></script>
+    <style>
+      body {}
+    </style>
+
+    {{!-- {{>layout_global_imports}} --}}
+    {{>extra_head}}
+  </head>
+  <body
+    class="dark"
+    data-new-gr-c-s-check-loaded="8.912.0"
+    data-gr-ext-installed=""
+
+    style = "--primary:#ffb2be; --on-primary:#660025;
+      --primary-container:#900038; --on-primary-container:#ffd9de;
+      --secondary:#e5bdc2; --on-secondary:#43292d;
+      --secondary-container:#5c3f43; --on-secondary-container:#ffd9de;
+      --tertiary:#ebbf90; --on-tertiary:#452b08; --tertiary-container:#5f411c;
+      --on-tertiary-container:#ffddba; --error:#ffb4ab; --on-error:#690005;
+      --error-container:#93000a; --on-error-container:#ffb4ab;
+      --background:#201a1b; --on-background:#ece0e0; --surface:#181213;
+      --on-surface:#ece0e0; --surface-variant:#524345;
+      --on-surface-variant:#d6c2c3; --outline:#9f8c8e;
+      --outline-variant:#524345; --shadow:#000000; --scrim:#000000;
+      --inverse-surface:#ece0e0; --inverse-on-surface:#362f2f;
+      --inverse-primary:#bc004b; --surface-dim:#181213;
+      --surface-bright:#3f3738; --surface-container-lowest:#120d0d;
+      --surface-container-low:#201a1b; --surface-container:#241e1f;
+      --surface-container-high:#2f2829; --surface-container-highest:#3a3334; "
+  >
+
+    <nav class="left drawer">
+      <header>
+        <nav>
+          <img class="circle" src="/static?page=default-avatar-fem.webp" />
+          <h6>{{_title}}</h6>
+        </nav>
+      </header>
+      <a href="/static?page=/hbs/wd5/mixer.hbs">
+        <i>instant_mix</i>
+        <span class="max">Mixer</span>
+      </a>
+      {{!-- <a>
+        <i>send</i>
+        <span>Outbox</span>
+      </a>
+      <a>
+        <i>favorite</i>
+        <span>favorities</span>
+      </a>
+      <a>
+        <i>delete</i>
+        <span>Trash</span>
+      </a>
+      <hr />
+      <label>Labels</label>
+      <a>
+        <i>fiber_manual_record</i>
+        <span>Label</span>
+      </a>
+      <a>
+        <i>change_history</i>
+        <span>Label</span>
+      </a>
+      <a>
+        <i>stop</i>
+        <span>Label</span>
+      </a> --}}
+    </nav>
+    <main class="responsive">
+        {{> extra}}
+        {{> @partial-block }}
+    </main>
+  </body>
+</html>

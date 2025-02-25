@@ -1,0 +1,307 @@
+import { status2CodeNStr, EHTTPStatus } from "../shared/httpStatus";
+export {EHTTPStatus, status2CodeNStr}
+
+import { registerRoute, getRoute, Routes } from "./Methods";
+
+import * as net from "node:net";
+
+const preciseTiming: boolean = true
+
+const confHeaders = [
+  'custom-logger',
+  'serverside-force-content-length'
+]
+
+export async function createWebServer(requestHandlers: IRequestHandler[], middlewares: any[] = [], dontPreserveConfigHeaders: boolean = false) {
+  const DPCH = dontPreserveConfigHeaders
+  
+  const server = net.createServer();
+  server.on("connection", handleConnection);
+
+
+  if (!Array.isArray(requestHandlers))
+    throw new Error(
+      `[Failed to register requestHandlers]\n-----------\nthe parameter is not an array type\n-----------`
+    );
+  for (const ReqHandler_ of requestHandlers) {
+    if (ReqHandler_.route == undefined || ReqHandler_.handler == undefined)
+      throw new Error(
+        `[Failed to register requestHandler]\n-----------\nHandler of: ${ReqHandler_} is missing some parameters!\n-----------`
+      );
+    const { route, status, handler, method } = ReqHandler_;
+    const RespObj: IRespObj =
+      status == undefined ? { status: false, handler, method } : { status, handler, method };
+    registerRoute(method, route, RespObj)
+  }
+
+  let fallback: IRespObj;
+
+
+  if (!Routes.has("*") && !Routes.has("fallback")) {
+    // routes.set("fallback", {
+    //   status: 404,
+    //   handler: function (req, res) {
+    //     console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    //     res.setHeader("Content-Type", "text/plain");
+    //     res.setHeader("serverside-force-content-length", "true");
+    //     res.setStatus(404);
+    //     res.end(`CANNOT GET '${req.url}', RETURNED 404`);
+    //   },
+    //   method: "ALL"
+    // });
+    registerRoute('ALL', '*', {
+      status: EHTTPStatus.NOT_FOUND,
+      handler: function (req, res) {
+        console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+        res.setHeader("Content-Type", "text/plain");
+        res.setHeader("serverside-force-content-length", "true");
+        res.setStatus(404);
+        res.end(`CANNOT GET '${req.url}', RETURNED 404`);
+      },
+      method: "ALL"
+    })
+  }
+
+  const test_star = Routes.has("*");
+  const test_fallback = Routes.has("fallback");
+
+  console.log (test_fallback)
+
+  if (test_star) fallback = await getRoute('ALL', '*');
+  else if (test_fallback) fallback = await getRoute('ALL', 'fallback');
+  else {
+    console.log("testing fallback routes, failed, starting get-process")
+    let key = "fallback"
+    // console.log("getting fallback routes from all dictionaries with selector 'fallback'", key, get_routes.get(key), post_routes.get(key), all_routes.get(key))
+    // key = "*"
+    // console.log("getting fallback routes from all dictionaries with selector '*'", key, get_routes.get(key), post_routes.get(key), all_routes.get(key))
+    throw new Error(
+      "Failed to auto assign fallback, please contact the developer"
+    );
+  }
+  async function handleConnection(socket: net.Socket): Promise<void> {
+    socket.once("readable", async function () {
+      let reqBuffer: Buffer = Buffer.from("");
+
+      let buf: any;
+      let reqHeader: string;
+      let reqBody: string;
+
+      while (true) {
+        buf = socket.read();
+
+        if (buf === null) break;
+
+        reqBuffer = Buffer.concat([reqBuffer, buf]);
+
+        let marker: number = reqBuffer.indexOf("\r\n\r\n");
+        if (marker !== -1) {
+          let remaining: Buffer = reqBuffer.slice(marker + 4);
+
+          reqHeader = reqBuffer.slice(0, marker).toString();
+
+          socket.unshift(remaining);
+
+          reqBody = remaining.toString();
+          
+          break;
+        }
+
+      }
+      // console.log(reqHeader)
+      if (reqHeader == undefined) return
+      const reqHeaders: string[] = reqHeader.split("\r\n");
+      const reqLine: string[] = reqHeaders.shift().split(" ");
+
+      const headers = reqHeaders.reduce((acc: any, currentHeader: string) => {
+        const [key, value] = currentHeader.split(":");
+        return {
+          ...acc,
+          [key.trim().toLowerCase()]: value.trim(),
+        };
+      }, {});
+
+      function parseQueries(): {[key:string]: string} {
+        const url_ = reqLine[1];
+        const QueryLine = url_.split("?")[1]
+        // console.log("QUERIESLINE", url_, QueryLine)
+        if (QueryLine == undefined) return
+        const queries = QueryLine.split("&")
+        let keyval_store: {[key:string]: string} = {}
+
+        for (const query of queries) {
+          const keyval = query.split("=")
+          const {key, val} = {key: keyval[0], val: keyval[1]}
+          keyval_store[key]=val
+          // console.log(`key: ${key}`, `val: ${val}`)
+        }
+
+        // console.log(keyval_store)
+        return keyval_store
+      }
+      const queries = parseQueries()
+
+      const request = {
+        method: reqLine[0],
+        url: reqLine[1].split("?")[0],
+        queries,
+        httpVersion: reqLine[2].split("/")[1],
+        headers,
+        body: reqBody,
+        socket,
+      };
+      // Initial Values
+      const stat_ok = status2CodeNStr(200);
+      let status = stat_ok.code;
+      let statusText = stat_ok.status;
+      let headersSent = false;
+      let isChunked = false;
+
+      const responseHeaders: Record<string, string | number> = {
+        server: "DDRM_NETLIB_HTTP",
+      };
+
+      const hiddenHeaders: Record<string, string|number> = {}
+
+      function setHeader(key: string, value: string | number) {
+        if (DPCH === true && confHeaders.includes(key)) hiddenHeaders[key.toLowerCase()] = value
+        else responseHeaders[key.toLowerCase()] = value;
+      }
+
+      function sendHeaders() {
+        if (!headersSent) {
+          headersSent = true;
+          setHeader("date", new Date().toUTCString());
+
+          socket.write(`HTTP/1.1 ${status} ${statusText}\r\n`);
+
+          const keys: string[] = Object.keys(responseHeaders);
+          for (const key of keys) {
+            socket.write(`${key}: ${responseHeaders[key]}\r\n`);
+          }
+        }
+      }
+
+      const response = {
+        async write(chunk) {
+          if (!headersSent) {
+            if (responseHeaders["serverside-force-content-length"] == "true" || hiddenHeaders['serverside-force-content-lenght'] == 'true') {
+              setHeader("content-length", chunk ? chunk.length + 1 : 0);
+            } else if (!responseHeaders["content-length"]) {
+              isChunked = true;
+              setHeader("transfer-encoding", "chunked");
+            }
+            sendHeaders();
+          }
+          if (isChunked) {
+            try {
+            const size = chunk.length.toString(16);
+
+            // console.log(
+            //     `WRITE(<Arg_type Buffer[], Arg_name chunk>)`,
+            //     `Buffer[${size}] chunk = ${chunk}`
+            // )
+
+            await socket.write(`${size}\r\n`);
+            await socket.write(chunk);
+            await socket.write("\r\n");
+            } catch (e) {
+              console.log(e)
+            }
+          } else await socket.write(chunk);
+        },
+        async end(chunk) {
+        //   console.log("actual-content-length:" chunk.length)
+          if (!headersSent) {
+            if (!responseHeaders["content-length"]) {
+              setHeader("content-length", chunk ? chunk.length : 0);
+            }
+            sendHeaders();
+          }
+          if (isChunked) {
+            if (chunk) {
+              const size = chunk.length.toString(16);
+              await socket.write(`${size}\r\n`);
+              await socket.write(chunk);
+              await socket.write("\r\n");
+            }
+            await socket.end(`0\r\n\r\n`);
+          } else {
+            // console.log(`SOCKET.END() TRIGEGRED! data:`, chunk)
+            await socket.write(`\r\n`)
+            await socket.end(chunk);
+          }
+        },
+        setHeader,
+        setStatus(newStatus: EHTTPStatus | number | string) {
+          const stat_ = status2CodeNStr(newStatus);
+          status = stat_.code;
+          statusText = stat_.status;
+        },
+        async json(data) {
+          if (headersSent)
+            throw new Error("Headers are already sent, cannot send JSON");
+          const json = Buffer.from(JSON.stringify(data));
+          setHeader("content-type", "application/json; charset=utf-8");
+          setHeader("content-length", json.length);
+          sendHeaders();
+          await socket.end(json);
+        },
+      };
+      
+      for (const mw of middlewares) {
+        mw.handler(request, response)
+      }
+
+      if (Routes.has(request.url)) {
+        // const startTime = performance.now();
+
+        const r_ = await getRoute(request.method, request.url)
+
+        if (r_ == null) await fallback.handler(request, response)
+        else await r_.handler(request, response)
+
+        // const endTime = performance.now();
+        // if (!(responseHeaders["custom-logger"] == "true" || hiddenHeaders['custom-logger'] == 'true'))
+        //   console.log(
+        //     `${new Date().toISOString()} - ${request.method} ${
+        //       request.url
+        //     } - { Took: "${preciseTiming == true ? (endTime - startTime) : Math.round(endTime - startTime)}ms" }`
+        //   );
+      } else {
+        // const startTime = performance.now();
+
+        fallback.handler(request, response);
+
+        // const endTime = performance.now();
+        // if (!(responseHeaders["custom-logger"] == "true" || hiddenHeaders['custom-logger'] == 'true'))
+        //   console.log(
+        //     `${new Date().toISOString()} - ${request.method} ${
+        //       request.url
+        //     } - { Took: "${preciseTiming == true ? (endTime - startTime) : Math.round(endTime - startTime)}ms" }`
+        //   );
+      }
+    });
+  }
+
+  return {
+    listen: (port: number, cb: (port: number, _: net.Server) => void) =>
+      cb(port, server.listen(port)),
+  };
+}
+
+export interface IRequestHandler extends IRespObj {
+  route: string;
+}
+
+export interface IRespObj {
+  status?: EHTTPStatus | boolean;
+  handler: (req, res) => any;
+  method: string;
+}
+
+interface IPrefKeys {
+  get: string,
+  post: string,
+  all: string
+}

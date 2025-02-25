@@ -1,0 +1,28 @@
+{{#>tpl_main _title=layout_title}}
+    {{#*inline "extra_head"}}
+      <script type="module" src="/static?page=/js/index.js"></script>
+    {{/inline}}
+    {{#*inline "extra"}}
+    {{/inline}}
+
+    {{!-- <h3>Welcome, {{test_obj.name}}!</h3>
+    <p>user_mutable == {{test_obj.user_mutable}}</p>
+    <div class="card_container">
+    {{#each people}}
+        <div class="card">
+            <div class="card_image">
+                <img src="{{this.avatar}}">
+            </div>
+            <div class="card_title">
+                <h3>{{this.name}}  <span class="age">({{this.age}})</span></h3>
+            </div>
+            <div class="card_desc">
+                <ul class="job">
+                    <li>Company: {{this.info.job.company}}</li>
+                    <li>Title: {{this.info.job.title}}</li>
+                </ul>
+            </div>
+        </div>
+    {{/each}}
+    </div> --}}
+{{/tpl_main}}

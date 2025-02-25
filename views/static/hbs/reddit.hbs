@@ -1,0 +1,326 @@
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    {{! <link rel="stylesheet" href="/static?page=/css/base.css" />
+
+    <script src="/static?page=/assets/setup.js" type="module" defer></script> }}
+
+    <link rel="stylesheet" href="/static?page=/assets/beer.min.css" />
+    <script type="module" src="/static?page=/assets/beer.min.js" defer></script>
+  </head>
+  <body class="dark" style="--primary:#ffb5a0;--on-primary:#5f1500;--primary-container:#862200;--on-primary-container:#ffdbd1;--secondary:#e7bdb2;--on-secondary:#442a22;--secondary-container:#5d4037;--on-secondary-container:#ffdbd1;--tertiary:#d8c58d;--on-tertiary:#3b2f05;--tertiary-container:#534619;--on-tertiary-container:#f5e1a7;--error:#ffb4ab;--on-error:#690005;--error-container:#93000a;--on-error-container:#ffb4ab;--background:#201a18;--on-background:#ede0dc;--surface:#181210;--on-surface:#ede0dc;--surface-variant:#53433f;--on-surface-variant:#d8c2bc;--outline:#a08c87;--outline-variant:#53433f;--shadow:#000000;--scrim:#000000;--inverse-surface:#ede0dc;--inverse-on-surface:#362f2d;--inverse-primary:#b02f00;--surface-dim:#181210;--surface-bright:#3f3735;--surface-container-lowest:#120d0b;--surface-container-low:#201a18;--surface-container:#251e1c;--surface-container-high:#2f2827;--surface-container-highest:#3b3331;" data-new-gr-c-s-check-loaded="8.912.0" data-gr-ext-installed="">
+    <div v-show="data.showPage">
+      <header class="fixed surface">
+        <nav><img src="/static?page=reddit.svg" style="width: 100px" />
+          <div class="max l">
+            <div class="field fill round prefix suffix"><i>home</i><input
+                value="Home"
+                readonly="readonly"
+              /><i>arrow_drop_down</i>
+              <menu><a class="transparent"><label>Moderating</label></a><a>Mod
+                  Queue</a><a>Modmail</a><a>r/Mod</a>
+                <hr /><a class="transparent"><label>Your communities</label></a><a
+                  class="row"
+                ><i class="tiny">people</i><div
+                    class="max"
+                  >r/sveltejs</div></a><a class="row"><i
+                    class="tiny"
+                  >people</i><div class="max">r/sveltejs</div></a><a
+                  class="row"
+                ><i class="tiny">people</i><div
+                    class="max"
+                  >r/sveltejs</div></a></menu>
+            </div>
+          </div>
+          <div class="max">
+            <div class="field fill round prefix"><i>search</i><input /></div>
+          </div><button class="transparent circle l"><i>trending_up</i><div
+              class="tooltip bottom"
+            >Popular</div></button><button class="transparent circle l"><i
+            >shield</i><div
+              class="tooltip bottom"
+            >Moderation</div></button><button class="transparent circle l m"><i
+            >chat</i><div class="tooltip bottom">Chat</div></button>
+          <button class="transparent circle l m"><i>notifications</i>
+            <div class="tooltip bottom">Notifications</div>
+          </button><button class="transparent circle l m"><i>add</i><div
+              class="tooltip bottom"
+            >Create Post</div></button><button class="transparent circle s m"><i
+            >more_vert</i><menu class="no-wrap left"><a>Popular</a><a
+              >Moderation</a><a>Chat</a><a>Notifications</a><a>Create Post</a></menu></button>
+          <button class="chip l"><i>campaign</i><span>Advertise</span></button>
+          <div
+            class="row wave no-space small-padding l small-round"
+            data-ui="#menu-profile"
+          ><img class="tiny" src="/static?page=/assets/reddit-profile.png" />
+            <div class="row no-space">
+              <div class="small-text"><b>leonardorafaelw</b>
+                <div><i class="tiny link">settings</i><span>999 karma</span></div>
+              </div><i>arrow_drop_down</i></div>
+            <menu class="no-wrap left" id="menu-profile"><a
+                class="transparent"
+              ><label>My stuff</label></a>
+              <a class="row">
+                <div class="max">Online Status</div><label class="switch"><input
+                    type="checkbox"
+                  /><span></span></label></a><a>Profile</a><a>Style Avatar</a><a
+              >User Settings</a>
+              <hr /><a class="transparent"><label>View Options</label></a>
+              <a class="row">
+                <div class="max">Mod mode</div><label class="switch"><input
+                    type="checkbox"
+                  /><span></span></label></a>
+              <a class="row">
+                <div class="max">Dark Mode</div><label class="switch"><input
+                    type="checkbox"
+                    onclick="updateTheme()"
+                    checked="checked"
+                    @click="updateTheme()"
+                  /><span></span></label></a>
+            </menu>
+          </div>
+        </nav>
+      </header>
+      <main class="responsive">
+        <div class="page right active">
+          <div class="grid">
+            <section class="s12 m12 l8">
+              <article class="no-elevate large-round">
+                <div class="row"><img
+                    class="medium"
+                    src="/static?page=/assets/reddit-profile.png"
+                  />
+                  <div class="max">
+                    <div class="field fill round"><input
+                        placeholder="Create Post"
+                        @click="openPostDialog('#post')"
+                      /></div>
+                  </div><button
+                    class="transparent circle"
+                    @click="openPostDialog('#image-video')"
+                  ><i>image</i><div class="tooltip bottom">Create Media Post</div></button><button
+                    class="transparent circle"
+                    @click="openPostDialog('#link')"
+                  ><i>link</i><div class="tooltip bottom">Create Link Post</div></button></div>
+              </article>
+              <nav class="scroll"><button class="chip"><i>rocket</i><span
+                  >Best</span></button><button class="chip"><i
+                  >local_fire_department</i><span>Hot</span></button><button
+                  class="chip"
+                ><i>news</i><span>New</span></button><button class="chip"><i
+                  >arrow_circle_up</i><span>Top</span></button>
+                <button class="chip"><i>trending_up</i><span
+                  >Rising</span></button>
+              </nav>
+              
+              <article class="no-elevate round">
+                <div class="row top-align">
+                  <div>
+                    <nav
+                      class="vertical no-space grey-text center-align"
+                    ><button class="transparent circle"><i>thumb_up</i></button>
+                      <div>Vote</div><button class="transparent circle"><i
+                        >thumb_down</i></button></nav>
+                  </div>
+                  <div class="max">
+                    <div>
+                      <div class="row"><img
+                          class="circle small"
+                          src="/static?page=reddit-community.png"
+                        />
+                        <div class="max"><b>r/sveltejs</b>&nbsp;<label
+                            class="grey-text"
+                          >Posted by u/leonardorafalw 3 hours ago</label>
+                          <h6 class="no-margin">How do I disabled all A11y
+                            messages? They are annoying</h6>
+                        </div>
+                      </div>
+                      <div class="medium-space"></div>
+                      <div>Lorem ipsum dolor sit amet, consectetur adipiscing
+                        elit. Suspendisse eget ipsum purus. Donec commodo, eros
+                        quis molestie consectetur, turpis ex eleifend sem, id
+                        viverra sapien justo ut erat. Nam mattis est eu
+                        vulputate iaculis. Vestibulum mi leo, eleifend vitae
+                        dolor et, malesuada pulvinar velit. Duis pharetra erat
+                        sapien, eu auctor nisl lacinia vel. Cras id tristique
+                        nulla. Morbi facilisis, nibh sit amet tincidunt
+                        molestie, purus sem lacinia turpis, ac varius sem leo in
+                        orci. Suspendisse vitae est enim. Donec malesuada nunc
+                        sed ligula mollis, ut efficitur turpis varius.
+                        Vestibulum libero est, faucibus in nibh eget, eleifend
+                        ornare enim. Mauris et dictum quam. Praesent nisi ex,
+                        ultricies at mi nec, sodales congue lacus.</div>
+                      <p>Etiam pulvinar vitae eros sed congue. Sed posuere
+                        sollicitudin lorem ut accumsan. Praesent at nisi ex.
+                        Vivamus nibh quam, finibus eget facilisis at, posuere et
+                        leo. Nam nisl velit, maximus id porttitor a, elementum
+                        sit amet odio. Nunc faucibus finibus lectus a facilisis.
+                        In finibus posuere purus quis tincidunt.</p>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+            </section>
+            <section class="s12 m12 l4">
+              <article class="no-elevate round">
+                <div class="row"><i>trophy</i>
+                  <div><b>Reddit Premium</b>
+                    <div>The best Reddit experience</div>
+                  </div>
+                </div>
+                <nav><button class="responsive">Try Now</button></nav>
+              </article>
+              <article class="no-elevate round">
+                <h6>Home</h6>
+                <p>Your personal Reddit frontpage. Come here to check in with
+                  your favorite communities.</p>
+                <hr class="medium" />
+                <nav class="vertical"><button class="responsive">Create Post</button><button
+                    class="responsive border"
+                  >Create Community</button></nav>
+              </article>
+              <article class="no-elevate round">
+                <h6>Recent Posts</h6>
+                <nav class="drawer max no-padding"><a class="small-round"><img
+                      class="small"
+                      src="/static?page=reddit-community.png"
+                    /><div class="max wrap"><div>How do I disabled all A11y
+                        messages? They are annoying</div><label
+                        class="grey-text"
+                      >5 points - 15 comments - 3h</label></div></a>
+                  <a class="small-round"><img
+                      class="small"
+                      src="/static?page=reddit-community.png"
+                    />
+                    <div class="max wrap">
+                      <div>"The golden rule of assertions"</div><label
+                        class="grey-text"
+                      >4 points - 10 comments - 3h</label></div>
+                  </a><a class="small-round"><img
+                      class="small"
+                      src="/static?page=reddit-community.png"
+                    /><div class="max wrap"><div>Cheers to Craft Design: Beer
+                        CSS - A Lightweight Material Design Framework</div><label
+                        class="grey-text"
+                      >3 points - 4 comments - 3h</label></div></a></nav>
+              </article>
+            </section>
+          </div>
+        </div>
+        <dialog id="dialog-post">
+          <nav class="wrap">
+            <h6>Create a post on</h6>
+            <div class="field border label l m"><input /><label
+              >Community</label><i>arrow_drop_down</i>
+              <menu><a class="row"><i class="tiny">people</i><span
+                  >r/svelte</span></a><a class="row"><i
+                    class="tiny"
+                  >people</i><span>r/svelte</span></a><a class="row"><i
+                    class="tiny"
+                  >people</i><span>r/svelte</span></a></menu>
+            </div>
+          </nav>
+          <div class="medium-space l m"></div>
+          <div class="medium-height large-width">
+            <div class="tabs scroll left-align l m"><a data-ui="#post"><i
+                >news</i><span>Post</span></a><a data-ui="#image-video"><i
+                >image</i><span>Image &amp; Video</span></a><a
+                data-ui="#link"
+              ><i>link</i><span>Link</span></a><a class="grey-text"><i
+                >insert_chart</i><span>Pool</span></a></div>
+            <div class="medium-space"></div>
+            <div class="page top" id="post">
+              <div class="field border label s"><input /><label
+                >Community</label><i>arrow_drop_down</i>
+                <menu><a class="row"><i class="tiny">people</i><span
+                    >r/svelte</span></a><a class="row"><i
+                      class="tiny"
+                    >people</i><span>r/svelte</span></a><a class="row"><i
+                      class="tiny"
+                    >people</i><span>r/svelte</span></a></menu>
+              </div>
+              <div class="field border label"><input /><label
+                >Title</label></div>
+              <div class="field border label extra textarea"><textarea
+                ></textarea><label>Text (optional)</label></div>
+            </div>
+            <div class="page top" id="image-video">
+              <div class="field border label s"><input /><label
+                >Community</label><i>arrow_drop_down</i>
+                <menu><a class="row"><i class="tiny">people</i><span
+                    >r/svelte</span></a><a class="row"><i
+                      class="tiny"
+                    >people</i><span>r/svelte</span></a><a class="row"><i
+                      class="tiny"
+                    >people</i><span>r/svelte</span></a></menu>
+              </div>
+              <div class="row">
+                <div class="max">
+                  <div class="field border label"><input /><label
+                    >Title</label></div>
+                </div><button><span>Select a file</span><input
+                    type="file"
+                  /></button></div>
+            </div>
+            <div class="page top" id="link">
+              <div class="field border label s"><input /><label
+                >Community</label><i>arrow_drop_down</i>
+                <menu><a class="row"><i class="tiny">people</i><span
+                    >r/svelte</span></a><a class="row"><i
+                      class="tiny"
+                    >people</i><span>r/svelte</span></a><a class="row"><i
+                      class="tiny"
+                    >people</i><span>r/svelte</span></a></menu>
+              </div>
+              <div class="field border label"><input /><label
+                >Title</label></div>
+              <div class="field border label"><textarea></textarea><label
+                >Url</label></div>
+            </div>
+            <div class="page top" id="pool"></div>
+          </div>
+          <footer class="fixed">
+            <nav class="right-align"><button
+                class="border"
+                data-ui="#dialog-post"
+              >Cancel</button><button
+                data-ui="#dialog-post"
+              >Confirm</button></nav>
+          </footer>
+        </dialog>
+      </main>
+    </div>
+    {{!-- <script>
+        document.addEventListener("DOMContentLoaded", (e)=> {
+        onMounted(async () => {
+  document.title = "Reddit - Beer CSS";
+  await updateTheme_(data.value, "#FF5722", "dark");
+  data.value.showPage = true;
+});
+
+function updateTheme () {
+  const newMode = ui("mode") === "dark" ? "light" : "dark";
+  ui("mode", newMode);
+}
+        })
+const updateTheme_ = async (data: ILayout, source: any, newMode?: string) => {
+  if (source?.target?.type === "color" && source?.target?.value) source = source.target.value;
+  const theme = await ui("theme", source) as IBeerCssTheme;
+  data.theme.dark = theme.dark;
+  data.theme.light = theme.light;
+  updateMode(data, newMode ?? ui("mode") as string);
+};
+
+const updateMode = (data: ILayout, newMode?: string) => {
+  const mode = newMode ?? (ui("mode") === "dark" ? "light" : "dark");
+  void ui("mode", mode);
+  data.theme.selected = mode;
+  data.isDark = mode === "dark";
+};
+
+    </script> --}}
+  </body>
+</html>
